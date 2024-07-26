@@ -1,0 +1,25 @@
+---
+# tasks file for network_rename
+- name: Get active network interface
+  shell: ip route | grep default | awk '{print $5}'
+  register: active_interface
+  failed_when: (active_interface |length == 0)
+
+- name: Extract the network interface name
+  ansible.builtin.set_fact:
+    iface: "{{ 0 | ansible.builtin.extract(active_interface.stdout_lines)  }}"
+
+- name: Show default network interface name
+  debug:
+    msg: "Interface name: {{  iface  }}"
+
+- name: Configure name in NetPlan /etc/netplan/{{  netplan_filename  }}
+  ansible.builtin.lineinfile:
+    path: /etc/netplan/{{  netplan_filename  }}
+    regexp: '^name: {{ iface  }}'
+    line: 'set-name: {{ new_iface_name  }}'
+    backrefs: yes
+    backup: yes
+  when: active_interface.stdout != new_iface_name
+  notify: 
+    - Applying Netplan Configuration

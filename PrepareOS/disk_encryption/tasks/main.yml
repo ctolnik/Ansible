@@ -1,0 +1,111 @@
+# tasks file for disk_encryption
+- name: Get facts about partitions
+  block:
+    - name: Extract the root partition name
+      ansible.builtin.set_fact:
+        root_partition: "{{ 0 | ansible.builtin.extract(ansible_mounts|json_query('[?mount == `/`].device'))  }}"
+
+    - name: Display root partition
+      ansible.builtin.debug:
+        msg: "Partition of root: {{ root_partition  }}"
+
+    - name: Get the disk of the root partition
+      ansible.builtin.command:
+        argv:
+          - lsblk
+          - -no 
+          - pkname 
+          - "{{ root_partition }}"
+      register: root_disk
+
+    - name: Get partitions on the root disk
+      ansible.builtin.command:
+        argv:
+          - lsblk
+          - -o 
+          - NAME,TYPE 
+          - | 
+          - grep
+          - -E 
+          - '^{{ root_disk.stdout }}[0-9]+'
+      register: partitions_on_root_disk
+      ignore_errors: yes
+
+    - name: Print no partitions
+      ansible.builtin.debug:
+        msg: "Partitions on the disk next to the root NOT found"
+      when: (partitions_on_root_disk.stdout_lines |length == 0)
+
+    - name: Display the partitions next to the root partition
+      ansible.builtin.debug:
+        msg: "Partitions on the disk next to the root partition: {{ partitions_on_root_disk.stdout_lines }}"
+      when: (partitions_on_root_disk.stdout_lines |length > 0)
+
+- name: Basic setup and verification for target system
+  block:
+    - name: Get facts for "{{ target_device }}"
+      parted:
+        device: "{{ target_device }}"
+      register: target_facts
+
+    - name: Print facts for "{{ target_device }}"
+      ansible.builtin.debug:
+        msg: "{{ target_facts }}"
+
+    - name: Check to see if there are any facts for target device. This means there are existing partitions that we would overwrite, so fail
+      ansible.builtin.debug:
+        msg: "{{ target_facts }}.partitions"
+      failed_when: (target_facts["partitions"] |length > 0)
+
+    - name: Print size for the disk
+      ansible.builtin.debug:
+        msg: "The size is {{ target_facts['disk']['size'] }} kib"
+
+    - name: Copy Luks keyfile to remote system
+      ansible.builtin.template:
+        src:  mylukskey.yml.j2
+        dest: "{{ keyfile }}"
+
+- name: Get info on what destination device will become
+  block:
+    - name: Task to attempt to get info on what my destination device will be
+      parted:
+        device: "{{ target_device  }}"
+        number: 1
+        state: info
+      register: info_output
+
+    - name: print info_output
+      ansible.builtin.debug:
+        msg: "{{ info_output }}"
+
+- name: Block to attempt parted
+  block:
+    - name: Use parted in block to create new partition
+      parted:
+        device: "{{ target_device }}"
+        number: 1
+        state: present
+      register: parted_output
+
+  rescue:
+    - name: Parted failed
+      fail:
+        msg: "Parted failed:  {{ parted_output }}"
+
+- name: block for LUKS and filesystem tasks
+  block:
+    - name: create LUKS container with passphrase
+      luks_device:
+        device: "{{ target_device }}1"
+        state: present
+        name: "{{ mycrypt }}"
+        keyfile: "{{ keyfile }}"
+
+    - name: Get Block device information
+      shell: lsblk -f
+      register: blk_info
+
+    - name: Show block device information
+      debug:
+        msg: "{{ blk_info.stdout_lines }}"

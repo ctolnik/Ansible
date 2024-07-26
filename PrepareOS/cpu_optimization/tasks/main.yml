@@ -1,0 +1,45 @@
+---
+# tasks file for cpu_optimization
+- name: Optimization CPU
+  block:
+  - name: Disable C-state for all CPUs
+    shell: |
+      if [ ! -f /etc/sysctl.d/cstate.conf ]; then
+        echo "Disabling C-state for CPUs"
+        echo "options intel_idle max_cstate=1" > /etc/modprobe.d/intel_idle.conf
+        echo "options processor max_cstate=1" > /etc/modprobe.d/cpu.conf
+        echo "C-state disabled."
+      else
+        echo "C-state already disabled."
+      fi
+    args:
+      executable: /bin/bash
+    register: cstate_status
+
+  - name: Make sure cpufrequtils is installed
+    ansible.builtin.apt:
+      name: cpufrequtils
+      state: present
+
+  - name: Copy cpufrequtils on target machine 
+    ansible.builtin.copy:
+      src: "files/cpufrequtils"
+      dest: "/etc/default/cpufrequtils"
+    notify:
+    - Wait for server to restart
+
+  - name: Stop and disable ondemand service
+    ansible.builtin.service:
+      name:    ondemand
+      enabled: no
+      state:   stopped
+    register: ondemand_service_result
+    failed_when: "ondemand_service_result is failed and 'Could not find the requested service' not in ondemand.msg"
+
+  - name: Get cpufrequtils info
+    shell:  /usr/bin/cpupower frequency-info
+    register: cpu_info
+
+  - name: Show cpefreq profile
+    debug:
+      msg: "{{ cpu_info.stdout_lines }}"

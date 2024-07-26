@@ -1,0 +1,4 @@
+---
+# defaults file for disk_encryption
+mycrypt: mycrypt
+luks_key: "VeryHardP@ssw0rd"

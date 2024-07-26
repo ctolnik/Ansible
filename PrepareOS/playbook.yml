@@ -1,0 +1,26 @@
+---
+- name: Prepare OS
+  hosts: servers
+  become: yes
+  tasks:
+    - ansible.builtin.import_role:
+        name: disk_encryption
+
+    - ansible.builtin.import_role:
+        name: cpu_optimization
+
+    - ansible.builtin.import_role:
+        name: network_rename
+
+
+  post_tasks:
+    - name: Display CPU information
+      shell: lscpu
+      register: cpu_info
+
+    - name: Display CPU info and Hyper-Threading status
+      debug:
+        msg: 
+          - "CPU Information:"
+          - "{{ cpu_info.stdout_lines }}"
+          - "Hyper-Threading Status: {{ 'Enabled' if 'Thread(s) per core:' in cpu_info.stdout and cpu_info.stdout.split('Thread(s) per core:')[1].strip() != '1' else 'Disabled' }}"

@@ -1,0 +1,4 @@
+---
+# defaults file for network_rename
+netplan_filename: "50-cloud-init.yaml"
+new_iface_name: "net0"

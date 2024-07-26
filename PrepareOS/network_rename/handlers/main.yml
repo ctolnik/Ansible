@@ -1,0 +1,6 @@
+---
+# handlers file for network_rename
+- name: Applying Netplan Configuration
+  command: netplan apply
+  listen: netplan apply config
+  become: true
